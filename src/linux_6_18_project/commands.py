@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import yaml
+
 from . import project as P
 
 
@@ -28,6 +30,7 @@ def fetch() -> None:
 def configure(update: int | None) -> Path:
     """Base config plus the update delta, resolved by the kernel's own kconfig."""
     P.check_base_config()
+    apply_patches()
     P.OUTPUT.mkdir(parents=True, exist_ok=True)
     if update is None:
         shutil.copyfile(P.BASE_CONFIG, P.OUTPUT / ".config")
@@ -52,6 +55,34 @@ def configure(update: int | None) -> Path:
     return resolved
 
 
+def apply_patches() -> list[str]:
+    """Apply the declared patches to the pinned checkout, in order.
+
+    The checkout keeps its commit; a patch is the only way source changes reach
+    a build, and the list is checked against the tree so a half-applied set
+    cannot be built by accident.
+    """
+    manifest_path = P.ROOT / "patches" / "manifest.yaml"
+    if not manifest_path.is_file():
+        return []
+    entries = (yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}).get("patches") or []
+    applied = []
+    for entry in entries:
+        patch = P.ROOT / "patches" / str(entry["file"])
+        if not patch.is_file():
+            raise P.ProjectError(f"patch listed but missing: {patch}")
+        check = subprocess.run(["git", "-C", str(P.SOURCE), "apply", "--check",
+                                "--reverse", str(patch)], capture_output=True, text=True)
+        if check.returncode == 0:
+            print(f"patch already applied: {patch.name}")
+            applied.append(patch.name)
+            continue
+        P.run(["git", "-C", str(P.SOURCE), "apply", str(patch)])
+        print(f"applied patch: {patch.name}")
+        applied.append(patch.name)
+    return applied
+
+
 def build(update: int | None, jobs: int | None = None,
           targets: tuple[str, ...] = ("Image", "dtbs", "modules")) -> P.Identity:
     identity = P.identity(update)
@@ -71,6 +102,7 @@ def build(update: int | None, jobs: int | None = None,
 def package(update: int | None, evidence: Path | None = None) -> list[Path]:
     """Produce the Debian packages and seal their identity into evidence."""
     identity = P.identity(update)
+    applied_patch_names = apply_patches()
     P.DEBS.mkdir(parents=True, exist_ok=True)
     # mkdebian runs `git rev-parse` in the *output* directory, which is outside
     # the pinned checkout, so the packaging step is given the repository
@@ -151,6 +183,7 @@ def package(update: int | None, evidence: Path | None = None) -> list[Path]:
         "base_config_sha256": P.base_config_digest(),
         "resolved_config_sha256": (P.OUTPUT / "resolved-config.sha256").read_text().split()[0],
         "update_delta": (P.update_delta(update).name if update is not None else None),
+        "patches": applied_patch_names,
         "checkout_tracked_changes": status or "none",
         "bindeb_pkg_exit": result.returncode,
         "ancillary_packages_not_built": ancillary_missing,

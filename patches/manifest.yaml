@@ -1,0 +1,18 @@
+schema_version: 1
+# Patches applied to the pinned checkout, in order, before configuring. Each
+# one is a single change with its reason and the update it belongs to; the
+# checkout itself stays at the commit in sources.lock.yaml.
+patches:
+  - file: 0001-ddr-bw-raw-64bit-readout.patch
+    update: update2
+    summary: add IOC_GET_ALL to the DDR monitor for unclamped per-port counters
+    reason: >-
+      the existing ioctl scales each delta by 16 and clamps into 32 bits, so
+      any window above 8 GiB/s reads as the same constant; a decode on this
+      board sustains about 22 GiB/s
+    touches:
+      - drivers/soc/spacemit/ddr_bw.c
+    verification: >-
+      the driver builds with the resolved update2 config, the existing ioctl is
+      unchanged, and a board run reads decode traffic above 8 GiB/s that the
+      old ioctl could only report as clamped

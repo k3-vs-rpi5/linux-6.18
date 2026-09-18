@@ -27,3 +27,17 @@ updates:
       kthread (rcu_preempt kthread starved for 175000 jiffies) and wedged the
       board; the delta enables RCU priority boosting and the lockup detectors
     release_version: 6.18.3-generic-update1
+  update2:
+    delta: config/update1.config
+    patches:
+      - patches/0001-ddr-bw-raw-64bit-readout.patch
+    reason: >-
+      the DDR monitor's only readout scales each delta by 16 and clamps into 32
+      bits, so any window above 8 GiB/s reports the same constant while a decode
+      on this board sustains about 22 GiB/s; the patch adds a raw per-port
+      readout and leaves the existing ioctl untouched
+    verification: >-
+      the driver object compiles with the resolved update2 config against the
+      pinned checkout, and a board run reads decode traffic above 8 GiB/s that
+      the old ioctl could only report as clamped
+    release_version: 6.18.3-generic-update2
