@@ -41,3 +41,15 @@ updates:
       pinned checkout, and a board run reads decode traffic above 8 GiB/s that
       the old ioctl could only report as clamped
     release_version: 6.18.3-generic-update2
+  update3:
+    delta: config/update3.config
+    reason: >-
+      the board's kernel exposes no BTF, so the eBPF collectors hand-validate
+      every tracepoint field offset and cannot use CO-RE; enabling
+      CONFIG_DEBUG_INFO_BTF gives them the kernel's own type information
+    verification: >-
+      /sys/kernel/btf/vmlinux exists after the reboot, the monitor's dependency
+      check flips btf from missing to present, the density collectors still
+      attach and report, and a CO-RE program compiled against a vmlinux.h
+      generated from the board's own BTF loads there
+    release_version: 6.18.3-generic-update3
