@@ -62,6 +62,17 @@ Products land in `.local/linux-6.18/debs/` and the sealed record in
 manifest, the resolved config, the package digests and the cross compiler
 identity.
 
+### What this pipeline produces, and what it does not
+
+The declared artefacts are `linux-image-<release>` and
+`linux-headers-<release>`; `linux-libc-dev` comes with them. The vendor's
+`debian/rules` additionally builds and packages perf, and it installs perf from
+`$(srctree)/tools/perf` while an out-of-tree build puts it in the object tree,
+so that ancillary package cannot be produced here. The manifest records
+`bindeb_pkg_exit` and `ancillary_packages_not_built` instead of presenting a
+partial run as a complete one, and the door refuses to continue when a declared
+artefact is missing.
+
 ## Installing on the board
 
 ```sh

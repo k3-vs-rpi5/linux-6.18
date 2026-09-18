@@ -52,8 +52,16 @@ scripts/build.sh --info
 ```
 
 产物落在 `.local/linux-6.18/debs/`，封存记录落在
-`/root/k3-evidence/linux-6.18/<内核 release>/`，其中含构建清单、已解析配置、包摘要
+`/root/k3-evidence/linux-6.18/<kernel release>/`，其中含构建清单、已解析配置、包摘要
 与交叉编译器身份。
+
+### 这条流水线产出什么、不产出什么
+
+声明产物是 `linux-image-<release>` 与 `linux-headers-<release>`，另有随行
+`linux-libc-dev`。厂商的 `debian/rules` 还会构建并打包 perf，而它从
+`$(srctree)/tools/perf` 安装 perf，树外构建却把 perf 放在输出目录里，因此该附带包
+在这里无法产出。清单记录 `bindeb_pkg_exit` 与 `ancillary_packages_not_built`，而不是
+把一次部分完成的运行打扮成完整运行；只要声明产物缺失，门就直接拒绝继续。
 
 ## 在板卡上安装
 

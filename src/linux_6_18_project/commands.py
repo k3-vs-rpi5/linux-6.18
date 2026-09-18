@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -71,16 +72,75 @@ def package(update: int | None, evidence: Path | None = None) -> list[Path]:
     """Produce the Debian packages and seal their identity into evidence."""
     identity = P.identity(update)
     P.DEBS.mkdir(parents=True, exist_ok=True)
-    P.run(P.make(identity, ["bindeb-pkg"], None,
-                 extra={"KDEB_PKGVERSION": identity.deb_version,
-                        "KBUILD_BUILD_VERSION": "1"}))
+    # mkdebian runs `git rev-parse` in the *output* directory, which is outside
+    # the pinned checkout, so the packaging step is given the repository
+    # explicitly instead of having the tree built in place.
+    env = dict(os.environ,
+               GIT_DIR=str(P.SOURCE / ".git"),
+               GIT_WORK_TREE=str(P.SOURCE))
+    # The headers package re-runs parts of the build inside a copied tree, where
+    # the cross prefix is not always carried through and the bare
+    # `riscv64-unknown-linux-gnu-gcc` is looked up on PATH.
+    env["PATH"] = f"{P.CROSS_COMPILE.parent}:{env.get('PATH', '')}"
+    # The vendored debian/rules builds tools/perf with a path relative to the
+    # object tree, which an out-of-tree build does not have, and it leaves perf
+    # output where it is built. Both are handled without touching the pinned
+    # checkout: the object tree gets a `tools` symlink, and perf is told where
+    # to put its output.
+    tools_link = P.OUTPUT / "tools"
+    if not tools_link.exists():
+        tools_link.symlink_to(P.SOURCE / "tools")
+    # perf has to be built where debian/rules then installs it from
+    # (`$(srctree)/tools/perf/perf`), so its output is not redirected. The
+    # checkout keeps its commit and its tracked files; the artefacts perf
+    # leaves are cleaned afterwards and the manifest records that check.
+    perf_opts = (f"prefix=/usr HAVE_NO_LIBBFD=1 HAVE_CPLUS_DEMANGLE_SUPPORT=1 "
+                 f"CROSS_COMPILE={P.CROSS_COMPILE} NO_LIBPYTHON=1 NO_LIBPERL=1 "
+                 f"NO_JEVENTS=1 WERROR=0")
+    # The vendor's debian/rules also builds and packages perf, and it installs
+    # perf from $(srctree)/tools/perf while an out-of-tree build puts it in the
+    # object tree - so that ancillary package cannot be produced here. The
+    # declared artefacts of this project are the kernel image, its headers and
+    # libc-dev; the exit status and the missing ancillary packages are recorded
+    # in the manifest instead of being smoothed over.
+    command = P.make(identity, ["bindeb-pkg"], None,
+                     extra={"KDEB_PKGVERSION": identity.deb_version,
+                            "KBUILD_BUILD_VERSION": "1",
+                            "PERF_BUILD_OPTS": perf_opts})
+    printable = " ".join(command)
+    print(f"+ {printable}", flush=True)
+    result = subprocess.run(command, cwd=str(P.SOURCE), env=env)
+    if result.returncode != 0:
+        print(f"note: bindeb-pkg exited {result.returncode}; "
+              "checking the declared artefacts before deciding", flush=True)
     produced = []
-    for candidate in sorted(P.SOURCE.parent.glob("*.deb")) + sorted(P.OUTPUT.glob("*.deb")):
+    candidates = (sorted(P.SOURCE.parent.glob("*.deb")) + sorted(P.OUTPUT.parent.glob("*.deb"))
+                  + sorted(P.OUTPUT.glob("*.deb")))
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
         target = P.DEBS / candidate.name
         shutil.move(str(candidate), target)
         produced.append(target)
     if not produced:
         raise P.ProjectError("bindeb-pkg produced no packages")
+    names = [deb.name for deb in produced]
+    required = [f"linux-image-{identity.uts_release}_", f"linux-headers-{identity.uts_release}_"]
+    missing = [prefix for prefix in required
+               if not any(name.startswith(prefix) for name in names)]
+    if missing:
+        raise P.ProjectError(
+            f"bindeb-pkg exited {result.returncode} and the declared artefacts are missing: "
+            f"{', '.join(missing)}")
+    ancillary_missing = [] if result.returncode == 0 else ["linux-tools", "linux-tools-common"]
+
+    # perf builds in place because debian/rules installs it from there; clean it
+    # and record the proof that the pinned checkout's tracked files are intact.
+    subprocess.run(["make", "-C", str(P.SOURCE / "tools" / "perf"), "clean"],
+                   capture_output=True, text=True)
+    status = subprocess.run(["git", "-C", str(P.SOURCE), "status", "--porcelain",
+                             "--untracked-files=no"],
+                            capture_output=True, text=True, check=True).stdout.strip()
 
     tree = (evidence or P.DEFAULT_EVIDENCE) / f"{identity.uts_release}"
     tree.mkdir(parents=True, exist_ok=True)
@@ -91,6 +151,10 @@ def package(update: int | None, evidence: Path | None = None) -> list[Path]:
         "base_config_sha256": P.base_config_digest(),
         "resolved_config_sha256": (P.OUTPUT / "resolved-config.sha256").read_text().split()[0],
         "update_delta": (P.update_delta(update).name if update is not None else None),
+        "checkout_tracked_changes": status or "none",
+        "bindeb_pkg_exit": result.returncode,
+        "ancillary_packages_not_built": ancillary_missing,
+        "declared_artefacts": required,
         "cross_compiler": {
             "path": str(P.CROSS_COMPILE) + "gcc",
             "version": subprocess.run([str(P.CROSS_COMPILE) + "gcc", "--version"],

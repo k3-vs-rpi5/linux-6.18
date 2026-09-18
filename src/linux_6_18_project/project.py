@@ -124,11 +124,12 @@ def make(identity_: Identity, targets: list[str], jobs: int | None, extra: dict[
     return command
 
 
-def run(command: list[str], cwd: Path | None = None) -> None:
+def run(command: list[str], cwd: Path | None = None,
+        env: dict[str, str] | None = None) -> None:
     printable = " ".join(command)
 
     print(f"+ {printable}", flush=True)
-    subprocess.run(command, cwd=str(cwd or SOURCE), check=True)
+    subprocess.run(command, cwd=str(cwd or SOURCE), check=True, env=env)
 
 
 def numeric_suffix(value: str) -> int:

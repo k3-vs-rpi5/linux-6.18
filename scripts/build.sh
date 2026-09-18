@@ -25,6 +25,9 @@ run_cli() {
 }
 
 case "${1:-}" in
+    fetch|config|package|verify|info)
+        run_cli "$@"
+        ;;
     --fetch)
         shift
         run_cli fetch "$@"
