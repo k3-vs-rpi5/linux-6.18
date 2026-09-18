@@ -47,6 +47,10 @@ grace-period kthread (`rcu_preempt kthread starved for 175000 jiffies`, 700 s at
 it kconfig silently drops `RCU_BOOST`, and a delta that looks applied while
 doing nothing is worse than no delta.
 
+Verified on the board on 2026-09-18: update1 is installed and running, its boot
+log reports `rcu: RCU priority boosting: priority 1 delay 500 ms.`, and the
+multi-agent ladder that wedged the board twice completes with no stall recorded.
+
 ## Build and package
 
 ```sh

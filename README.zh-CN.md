@@ -41,6 +41,10 @@ update1 的由来：两次高并发 `llama-server` 压测把 RCU 宽限期内核
 的：没有它 kconfig 会静默丢弃 `RCU_BOOST`，而"看起来生效、实际什么都没做"的增量比
 没有增量更糟。
 
+2026-09-18 已在板卡上验证：update1 已安装并运行，其启动日志报告
+`rcu: RCU priority boosting: priority 1 delay 500 ms.`，且当初两次卡死板卡的多 agent
+梯度在有记录的情况下无 stall 完成。
+
 ## 构建与打包
 
 ```sh
