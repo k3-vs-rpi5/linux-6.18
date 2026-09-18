@@ -46,6 +46,10 @@ done < "$CREDENTIALS"
 [ -n "$host" ] && [ -n "$user" ] && [ -n "$secret" ] || {
     echo "credentials record must contain: host account secret" >&2; exit 1; }
 
+# A board whose address changed can be reached without editing the credential
+# record: export K3_BOARD_HOST=<address> for this invocation.
+[ -n "${K3_BOARD_HOST:-}" ] && host=$K3_BOARD_HOST
+
 SSHPASS=$secret
 export SSHPASS
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$WORKSPACE/.local/known_hosts \

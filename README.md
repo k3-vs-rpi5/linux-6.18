@@ -110,6 +110,17 @@ Installing a kernel is a remote change and the door performs it only when
 asked; it prints the package identity first and reports the running kernel
 afterwards.
 
+A board whose address changed is reached without editing the credential record:
+export `K3_BOARD_HOST=<address>` for the invocation.
+
+Update 3 was deployed to a second K3 (16 GB, previously stock
+`6.18.3-generic`) on 2026-09-18: all 17 device trees it installs are
+byte-identical to that board's stock set, the boot environment was re-pointed to
+`6.18.3-generic-update3`, and the running kernel reports `CONFIG_RCU_BOOST=y`,
+`CONFIG_DEBUG_INFO_BTF=y`, the RCU priority-boosting boot line, zero stalls,
+`/dev/ddr_perf`, and a 6,664,699-byte `/sys/kernel/btf/vmlinux`. Record:
+`/root/k3-evidence/linux-6.18/6.18.3-generic-update3/deployment-192.168.100.215`.
+
 ## Devices a benchmark does not need
 
 ```sh

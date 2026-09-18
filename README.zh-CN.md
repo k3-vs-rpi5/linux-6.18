@@ -94,6 +94,15 @@ scripts/run.sh --install .local/linux-6.18/debs --reboot
 安装内核属于远端变更，只有在被明确要求时该门才会执行；执行前先打印包身份，执行后
 报告实际运行的内核。
 
+板卡地址变化时无需修改凭据记录：在调用时导出 `K3_BOARD_HOST=<地址>` 即可。
+
+update3 已于 2026-09-18 部署到第二台 K3（16 GB，此前为原厂 `6.18.3-generic`）：
+它安装的 17 个设备树与该机原厂集合逐字节一致，启动环境已指向
+`6.18.3-generic-update3`，运行中的内核报告 `CONFIG_RCU_BOOST=y`、
+`CONFIG_DEBUG_INFO_BTF=y`、RCU 优先级提升启动日志、0 次 stall、`/dev/ddr_perf`
+以及 6,664,699 字节的 `/sys/kernel/btf/vmlinux`。记录位于
+`/root/k3-evidence/linux-6.18/6.18.3-generic-update3/deployment-192.168.100.215`。
+
 ## 基准测试不需要的设备
 
 ```sh
