@@ -20,13 +20,16 @@ STATE=/var/lib/linux-6.18/devices.state
 ACTION=status
 ACTION_ARG=
 REBOOT=no
+WITH_DBG=no
 while [ $# -gt 0 ]; do
     case "$1" in
         --status) ACTION=status; shift ;;
         --install) ACTION=install; ACTION_ARG=$2; shift 2 ;;
         --devices) ACTION=devices; ACTION_ARG=$2; shift 2 ;;
         --reboot) REBOOT=yes; shift ;;
-        *) echo "usage: $0 [--status] [--install DIR [--reboot]] [--devices off|on|status]" >&2
+        --with-dbg) WITH_DBG=yes; shift ;;
+        *) echo "usage: $0 [--status] [--install DIR [--reboot] [--with-dbg]]" >&2
+           echo "          [--devices off|on|status]" >&2
            exit 2 ;;
     esac
 done
@@ -113,13 +116,55 @@ case "$ACTION" in
         ;;
     install)
         [ -d "$ACTION_ARG" ] || { echo "no such package directory: $ACTION_ARG" >&2; exit 1; }
-        ls "$ACTION_ARG"/*.deb >/dev/null 2>&1 || { echo "no .deb files in $ACTION_ARG" >&2; exit 1; }
+        # The debug-symbol package is 683 MB and the kernel does not need it, so
+        # it stays behind unless it is asked for explicitly.
+        set -- "$ACTION_ARG"/linux-image-*.deb "$ACTION_ARG"/linux-headers-*.deb \
+               "$ACTION_ARG"/linux-libc-dev*.deb
+        packages=
+        for candidate in "$@"; do
+            [ -f "$candidate" ] || continue
+            case "$candidate" in
+                *-dbg_*) [ "$WITH_DBG" = yes ] || { echo "skipping $(basename "$candidate") (-dbg)"; continue; } ;;
+            esac
+            packages="$packages $candidate"
+        done
+        [ -n "$packages" ] || { echo "no installable .deb files in $ACTION_ARG" >&2; exit 1; }
         echo "-- packages to install"
-        dpkg-deb -f "$ACTION_ARG"/linux-image-*.deb Package Version 2>/dev/null || true
+        for candidate in $packages; do
+            dpkg-deb -f "$candidate" Package Version 2>/dev/null || true
+        done
         remote "rm -rf $STAGE && mkdir -p $STAGE"
         # shellcheck disable=SC2086
-        sshpass -e scp -q $SSH_OPTS "$ACTION_ARG"/*.deb "$DEST:$STAGE/"
+        # shellcheck disable=SC2086
+        sshpass -e scp -q $SSH_OPTS $packages "$DEST:$STAGE/"
         remote "dpkg -i $STAGE/*.deb 2>&1 | tail -20"
+        # The board boots by file name, not by "the newest kernel": u-boot reads
+        # /boot/env_k3.txt, which names one vmlinuz, one initrd and one dtb
+        # directory. Installing a kernel therefore has to re-point that file, or
+        # the next reboot comes back on the old kernel.
+        release=$(basename "$packages" 2>/dev/null || true)
+        release=$(for candidate in $packages; do
+                      case "$candidate" in
+                          */linux-image-*) echo "$(basename "$candidate")" ;;
+                      esac
+                  done | head -1 | sed 's/^linux-image-//; s/_.*$//')
+        [ -n "$release" ] || { echo "cannot derive the kernel release from the packages" >&2; exit 1; }
+        echo "-- re-pointing the boot environment at $release"
+        remote "set -e
+            [ -f /boot/vmlinuz-$release ] || { echo 'missing /boot/vmlinuz-$release' >&2; exit 1; }
+            if [ ! -f /boot/initrd.img-$release ]; then
+                echo 'generating initrd for $release'
+                update-initramfs -c -k $release >/dev/null 2>&1 || \\
+                    mkinitramfs -o /boot/initrd.img-$release $release
+            fi
+            [ -d /boot/spacemit/$release ] || { echo 'missing dtb directory /boot/spacemit/$release' >&2; exit 1; }
+            [ -f /boot/env_k3.txt.before-$release ] || cp /boot/env_k3.txt /boot/env_k3.txt.before-$release
+            sed -i -e 's|^knl_name=.*|knl_name=vmlinuz-$release|' \\
+                   -e 's|^ramdisk_name=.*|ramdisk_name=initrd.img-$release|' \\
+                   -e 's|^dtb_dir=.*|dtb_dir=spacemit/$release|' /boot/env_k3.txt
+            echo '-- /boot/env_k3.txt now:'
+            grep -E '^(knl_name|ramdisk_name|dtb_dir)=' /boot/env_k3.txt
+            ls -l /boot/vmlinuz-$release /boot/initrd.img-$release | sed 's/^/  /'"
         if [ "$REBOOT" = yes ]; then
             echo "-- rebooting into the new kernel"
             remote "sync; nohup sh -c 'sleep 2; reboot' >/dev/null 2>&1 &" || true
