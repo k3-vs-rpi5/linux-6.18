@@ -104,6 +104,12 @@ def package(update: int | None, evidence: Path | None = None) -> list[Path]:
     identity = P.identity(update)
     applied_patch_names = apply_patches()
     P.DEBS.mkdir(parents=True, exist_ok=True)
+    # A stale package in this directory is not harmless: the install door globs
+    # it, and a first version of that door re-pointed the board's boot
+    # environment at the *older* release it found there. Only the set produced
+    # by this run stays.
+    for stale in list(P.DEBS.glob("linux-*.deb")):
+        stale.unlink()
     # mkdebian runs `git rev-parse` in the *output* directory, which is outside
     # the pinned checkout, so the packaging step is given the repository
     # explicitly instead of having the tree built in place.
@@ -173,6 +179,15 @@ def package(update: int | None, evidence: Path | None = None) -> list[Path]:
     status = subprocess.run(["git", "-C", str(P.SOURCE), "status", "--porcelain",
                              "--untracked-files=no"],
                             capture_output=True, text=True, check=True).stdout.strip()
+    patched_files = {str(path) for entry in (yaml.safe_load(
+        (P.ROOT / "patches" / "manifest.yaml").read_text(encoding="utf-8")) or {}
+        ).get("patches", []) for path in entry.get("touches", [])}
+    changed_files = {line.split()[-1] for line in status.splitlines() if line.strip()}
+    undeclared = sorted(changed_files - patched_files)
+    if undeclared:
+        raise P.ProjectError(
+            "the checkout differs from the lock outside the declared patches: "
+            + ", ".join(undeclared))
 
     tree = (evidence or P.DEFAULT_EVIDENCE) / f"{identity.uts_release}"
     tree.mkdir(parents=True, exist_ok=True)

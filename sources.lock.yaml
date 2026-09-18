@@ -28,7 +28,7 @@ updates:
       board; the delta enables RCU priority boosting and the lockup detectors
     release_version: 6.18.3-generic-update1
   update2:
-    delta: config/update1.config
+    delta: config/update2.config
     patches:
       - patches/0001-ddr-bw-raw-64bit-readout.patch
     reason: >-

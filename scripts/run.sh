@@ -142,12 +142,22 @@ case "$ACTION" in
         # /boot/env_k3.txt, which names one vmlinuz, one initrd and one dtb
         # directory. Installing a kernel therefore has to re-point that file, or
         # the next reboot comes back on the old kernel.
-        release=$(basename "$packages" 2>/dev/null || true)
-        release=$(for candidate in $packages; do
-                      case "$candidate" in
-                          */linux-image-*) echo "$(basename "$candidate")" ;;
-                      esac
-                  done | head -1 | sed 's/^linux-image-//; s/_.*$//')
+        # The release is the newest one among the packages being installed, not
+        # the first the shell happens to glob: a stale package left in the
+        # directory once re-pointed the boot environment back to an older
+        # kernel after the vendor's postinst had already done it correctly.
+        release=
+        for candidate in $packages; do
+            case "$candidate" in
+                */linux-image-*) ;;
+                *) continue ;;
+            esac
+            candidate_release=$(basename "$candidate" | sed 's/^linux-image-//; s/_.*$//')
+            if [ -z "$release" ] || dpkg --compare-versions "$candidate_release" gt "$release"; then
+                release=$candidate_release
+            fi
+        done
+        echo "-- installing release $release"
         [ -n "$release" ] || { echo "cannot derive the kernel release from the packages" >&2; exit 1; }
         echo "-- re-pointing the boot environment at $release"
         remote "set -e

@@ -51,15 +51,19 @@ Verified on the board on 2026-09-18: update1 is installed and running, its boot
 log reports `rcu: RCU priority boosting: priority 1 delay 500 ms.`, and the
 multi-agent ladder that wedged the board twice completes with no stall recorded.
 
-Update 2 is prepared and not yet built: it adds a patch, not a config. The DDR
+Update 2 adds a patch, not a config. The DDR
 performance monitor's only readout scales each delta by 16 and clamps it into 32
 bits, so it saturates at 4,096 MiB/s in a one-second window and 8,188 MiB/s in
 half a second - and a decode on this board sustains about 22 GiB/s, which the old
 readout could only report as that constant. The patch adds a raw per-port
 readout and leaves the existing ioctl untouched, so the vendor's own client
-keeps working. It is compile-verified against the pinned checkout; building,
-packaging and installing it is the next step, and it needs the operator's
-approval like any kernel change.
+keeps working.
+
+Verified on the board on 2026-09-18: update 2 is installed and running
+(`6.18.3-generic-update2`), the boot log still reports the RCU boosting, and a
+decode window read through the aggregate now reports 21,075 to 22,356 MiB/s per
+tick with **zero clamped samples** and 93.1 % of the roof - where the old readout
+could only report the constant.
 
 ## Patches
 
