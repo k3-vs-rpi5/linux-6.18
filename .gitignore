@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+/.local/
+/results/
+/artifacts/
+# The pinned vendor kernel tree: a checkout with its own history and its own
+# build outputs, retrieved by scripts/build.sh --fetch.
+/src/linux-6.18/

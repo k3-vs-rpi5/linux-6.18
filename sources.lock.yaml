@@ -1,0 +1,29 @@
+schema_version: 1
+source:
+  name: linux-6.18 (SpacemiT BSP)
+  upstream: https://github.com/spacemit-com/linux-6.18.git
+  ref: k3-br-v1.0.7
+  commit: 4158237f35b8fd62ba198c1627e5a66e5a34c50f
+  license: GPL-2.0
+  checkout: src/linux-6.18
+  identity_note: >-
+    the board runs 6.18.3-generic #1.0.7.4, which is this branch family; the
+    branch head k3-br-v1.0.8 exists and is deliberately not used, so update1
+    differs from the running kernel only by its declared config delta
+  integrity_command: git -C src/linux-6.18 rev-parse HEAD
+  kernelrelease_command: make -s -C src/linux-6.18 kernelversion
+base_config:
+  file: config/base.config
+  sha256: fa00a0a4f5791ec7798fc6e1abc26d0d2d59a1a6e76734768291d8facfbd9270
+  origin: /proc/config.gz on the K3 board, 2026-09-18
+  note: >-
+    the running configuration, so the first update changes the declared options
+    and nothing else
+updates:
+  update1:
+    delta: config/update1.config
+    reason: >-
+      the high-concurrency multi-agent load starved the RCU grace-period
+      kthread (rcu_preempt kthread starved for 175000 jiffies) and wedged the
+      board; the delta enables RCU priority boosting and the lockup detectors
+    release_version: 6.18.3-generic-update1
