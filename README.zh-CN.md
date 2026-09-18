@@ -55,6 +55,18 @@ update2 加的是补丁而非配置。DDR 性能监控器唯一的读数会把�
 仍报告 RCU 优先级提升，且通过总集读取的一个解码窗口现在逐 tick 报出
 21,075–22,356 MiB/s、**0 个钳位样本**、占天花板 93.1 %——而旧读数只能报那个常数。
 
+update3 打开 `CONFIG_DEBUG_INFO_BTF`，于是板卡公开
+`/sys/kernel/btf/vmlinux`，eBPF 采集器可以针对它将运行的内核构建，而不再依赖手工校验的结构
+偏移。已验证：板卡 BTF 渲染出 168,399 行的 `vmlinux.h`，内存采集器 18 个 CO-RE 程序
+全部挂载成功。
+
+update4 打开函数跟踪，它存在的原因是缺了它某项测量根本做不了。厂商配置没有开启
+`CONFIG_FUNCTION_TRACER`，因此 `DYNAMIC_FTRACE` 也未开启，`/sys/kernel/tracing`
+下没有 `available_filter_functions`，BPF fentry 程序无法挂载——在原厂内核上实测：
+`bpf_program__attach()` 报 `-EFAULT`。应用该增量后，板卡报告 60,700 个可过滤函数、
+`function` tracer 可用、fentry 挂载成功、0 次 stall，以及 6,688,553 字节的
+`/sys/kernel/btf/vmlinux`。它解锁了什么写在监控器的 `docs/kernel-enhancements.md`。
+
 ## 补丁
 
 固定检出绝不原地修改：源码变更以 `patches/` 中的补丁存在，并在

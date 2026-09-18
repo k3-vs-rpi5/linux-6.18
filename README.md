@@ -65,6 +65,22 @@ decode window read through the aggregate now reports 21,075 to 22,356 MiB/s per
 tick with **zero clamped samples** and 93.1 % of the roof - where the old readout
 could only report the constant.
 
+Update 3 turns on `CONFIG_DEBUG_INFO_BTF`, so the board publishes
+`/sys/kernel/btf/vmlinux` and an eBPF collector can be built against the kernel
+it will run on instead of against hand-validated struct offsets. Verified: the
+board's BTF renders a 168,399-line `vmlinux.h`, and the memory collector attaches
+18 of 18 CO-RE programs.
+
+Update 4 turns on function tracing, and it exists because a measurement could not
+be made without it. The vendor configuration leaves `CONFIG_FUNCTION_TRACER`
+off, which also leaves `DYNAMIC_FTRACE` off, so `/sys/kernel/tracing` has no
+`available_filter_functions` and a BPF fentry program cannot be attached -
+measured on the stock kernel: `bpf_program__attach()` fails with `-EFAULT`. With
+the delta applied the board reports 60,700 filterable functions, a `function`
+tracer, successful fentry attach, zero stalls and a 6,688,553-byte
+`/sys/kernel/btf/vmlinux`. What that unlocked is in the monitor's
+`docs/kernel-enhancements.md`.
+
 ## Patches
 
 The pinned checkout is never edited in place: a source change is a patch in
