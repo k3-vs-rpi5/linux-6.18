@@ -212,3 +212,27 @@ Items that look "unavailable" but are not kernel-config problems:
 * **barrier device** (`/dev/tcm_sync_mem`): a kernel patch to the BSP we own, not a configuration
   option - the design is a small coherent region exposed for cross-thread barriers, and it is the next
   kernel work item after update5 boots.
+
+## Observability inventory and what still has to be enabled (assessed 2026-09-23)
+
+Checked against `config/base.config` plus the update deltas, with the question each item serves:
+
+| capability | state | question it answers |
+|---|---|---|
+| `FUNCTION_TRACER`, `DYNAMIC_FTRACE`, `DEBUG_INFO_BTF` | **present** (update4, installed) | which kernel functions the AI path calls |
+| `KPROBE_EVENTS`, `FTRACE_SYSCALLS` | present | per-call timing, syscall-level view |
+| `SCHED_TRACER`, `SCHEDSTATS` | present | who runs, wakeups, runqueue behaviour |
+| `BLK_DEV_IO_TRACE` | present | storage path when the page cache misses |
+| `KALLSYMS_ALL`, `PERF_EVENTS`, `BPF_SYSCALL`, `BPF_JIT`, `TRACER_SNAPSHOT` | present | symbol resolution, perf, eBPF, snapshots |
+| `FUNCTION_PROFILER`, `FUNCTION_GRAPH_RETVAL` | **added in update5** (building) | kernel time ranking per function without parsing graph blocks |
+| `UPROBES`, `UPROBE_EVENTS` | **missing -> update6** | the 20-30 ms session-creation cost, traced in *user* space (llama.cpp functions, vendor entry points) without modifying them |
+| `OSNOISE_TRACER`, `HWLAT_TRACER` | missing -> update6 | is the board quiet, and are there hardware stalls - the monitor's question, at kernel resolution |
+| `IRQSOFF_TRACER`, `PREEMPT_TRACER`, `TIMERLAT_TRACER` | missing -> update6 | worst-case interrupt-off, preemption-off and timer latency = the jitter a host-side decode step can suffer |
+| `STACK_TRACER` | missing -> update6 | turns a latency finding into a call path |
+| `HW_PERF_EVENTS` | missing -> update6 | hardware counters on the X100 cluster (the AI cores stay invisible to Linux) |
+| 1 GiB hugetlb reservation and `/dev/hugetlb_1g` | config present (`HUGETLBFS`, `HUGETLB_PAGE`), pool and device absent | whether the runtime's `mem_backend: HPAGE` can be served properly |
+| a barrier device replacing the heap fallback | needs a BSP patch | ~5 ms/token of barrier cost across ~253 operator boundaries |
+
+Two deltas therefore follow: **update5** (profiler + graph return values, already building) and
+**update6** (uprobes, latency/noise tracers, stack tracer, hardware perf events). The barrier device and
+the hugetlb pool are not options but work items.
