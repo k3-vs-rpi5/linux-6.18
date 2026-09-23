@@ -2,6 +2,34 @@
 
 # SpacemiT 6.18 kernel project
 
+## This project optimises the Linux kernel; it does not tune around it
+
+The workspace's AI work depends on the kernel in ways that no user-space parameter can reach, and this
+project is where that dependency is owned:
+
+* **the AI cluster is a kernel device class**: `/dev/tcm` hands out the eight blocks that every compute
+  thread needs, `/proc/set_ai_thread` (mode 0222, handler `hmp_set_ai_thread`) is the only way a thread
+  is bound to cpu8-15 - the kernel does it with `set_cpus_allowed_ptr`, which is why user-space
+  `sched_setaffinity` to those cores returns `EINVAL` - and `cpu_device_up` powers an AI core up on
+  demand, which is why `nproc` reports 8 while the runtime's banner reports 16;
+* **the barrier path is a missing device**: the runtime logs
+  `open(/dev/tcm_sync_mem) failed, errno=2` and falls back to heap barriers, a cost the llama.cpp
+  campaign accounts at ~5 ms per token (~7 % of a 67 ms token across ~253 operator boundaries);
+* **observability is a build option**: this image was built without `CONFIG_FUNCTION_TRACER`
+  (measured: `available_tracers` = `blk wakeup_dl wakeup_rt wakeup nop`), so kernel-function tracing of
+  the AI path is impossible until an update is installed; `config/update4.config` already carries
+  `CONFIG_FUNCTION_TRACER=y`, `CONFIG_DYNAMIC_FTRACE=y` and `CONFIG_DEBUG_INFO_BTF=y`, and the first
+  update has never been built and installed on the board;
+* **memory policy matters at kernel level**: the runtime declares `mem_backend: HPAGE` and asks for
+  huge pages itself; THP `never` costs a measured 3.4 %, and the 1 GiB hugetlb path the runtime probes
+  (`/dev/hugetlb_1g`) does not exist on this image.
+
+So the standing position of this project is: **the kernel is a first-class part of the stack to be
+measured, patched and optimised** - TCM allocation and barrier semantics, HMP thread registration and
+hotplug, DMA mapping attributes, huge-page policy, preemption and IRQ steering - and not a place to
+stop at configuration toggles or to route around in user space. Any user-space finding that ends in
+"the kernel decides this" lands here as a patch or an update delta.
+
 This project builds the K3's kernel from the vendor BSP and packages it as
 Debian packages, so a kernel-side change can be tested as a real update instead
 of a hand-copied image. Configuration comes first; patches to the tree come
