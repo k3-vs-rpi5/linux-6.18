@@ -188,3 +188,27 @@ approval. Once the remote repository exists, add this entry to `default.xml`:
 ```xml
 <project name="linux-6.18.git" path="projects/linux-6.18" />
 ```
+
+## Update deltas and what each one makes possible
+
+Each update adds exactly one declared delta in `config/updateN.config`, and the delta states what the
+previous kernel could not do:
+
+| delta | what it enables | why it was needed |
+|---|---|---|
+| update1-3 | (earlier kernel work: tracing prerequisites, RCU boost, lockup detectors) | iterative kernel work before the AI analysis |
+| **update4** | `FUNCTION_TRACER`, `DYNAMIC_FTRACE`, `DEBUG_INFO_BTF` (installed 2026-09-23) | kernel-function tracing of the AI path was impossible on the image that shipped; update4 removed that limit |
+| **update5** (built here) | `FUNCTION_PROFILER`, `FUNCTION_GRAPH_RETVAL` | the *function profiler* (per-function call counts and total time in `trace_stat/function*`) is the instrument that ranks kernel time without parsing interleaved graph blocks, and the graph return value distinguishes which branch of a traced function ran |
+
+Items that look "unavailable" but are not kernel-config problems:
+
+* **1 GiB hugetlb**: `CONFIG_HUGETLBFS=y` and `CONFIG_HUGETLB_PAGE=y` are already in the base config, so
+  the capability exists; what is missing is a reserved pool (`vm.nr_hugepages = 0`) and the
+  `/dev/hugetlb_1g` node the runtime probes, which is not a standard kernel device - it is either a
+  boot-time reservation plus a vendor device, or a vendor question. Both paths are recorded rather than
+  assumed.
+* **graph-trace parsing across sixteen CPUs**: a user-space parser problem, not a kernel one - the fix
+  is a per-CPU matched parser or one function per pass, and it belongs in this project's tools.
+* **barrier device** (`/dev/tcm_sync_mem`): a kernel patch to the BSP we own, not a configuration
+  option - the design is a small coherent region exposed for cross-thread barriers, and it is the next
+  kernel work item after update5 boots.
