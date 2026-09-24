@@ -258,3 +258,14 @@ kernel-side candidate for the 20-30 ms session-creation cost this project has be
 
 Tool and evidence: `tools/kernel-profile.py` in the ONNX project, raw 16-CPU dump in
 `k3-evidence/linux-6.18/update6-profile-20260923/profile-full.txt`.
+
+
+### Cold versus warm: the read cost is storage, and residency is the lever (2026-09-24)
+
+Same benchmark, one variable - `drop_caches` between runs: **cold** 52.2 s wall with **3.15 GB read from
+storage** and `filemap_add_folio` 27,967 calls / 985 ms; **warm** 47.6 s with 512 sectors and
+`filemap_get_entry`/`filemap_fault` at 1.7-2.6 us per call. The 6.1 ms per `vfs_read` seen earlier is
+therefore cold-cache I/O, not a constant, and a cold start costs 4.6 s of wall time plus ~1 s of kernel
+CPU. The lever is residency of the weights before the first request (preload, readahead, mlock or a
+warm-up pass) - a base-software change with a measured prize, and the first such change this project
+has quantified on the kernel side.
