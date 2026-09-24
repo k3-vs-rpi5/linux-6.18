@@ -312,3 +312,22 @@ The measurement itself confirms the kernel-side picture from the user side: the 
 scheduler reservation are **sub-millisecond to low-millisecond** operations, while `graph_compute` is
 where the millisecond-scale work lives - the same conclusion the kernel function profile reached from
 the other direction (93-96 % of kernel time is waiting; the run's time is inside the graph work).
+
+
+### Interference and hardware-stall checks, and the perf gap (2026-09-24)
+
+**`osnoise` works** (tracer present after update6) and reports per-CPU noise; in a 6 s window during a
+bench, cores 1/3/5/7 show 37-64 % "noise". Interpretation matters: the osnoise thread loses its runtime
+to *everything else on that core*, which includes our own workload's host-side threads - so this is not
+yet an OS-noise number but a "the X100 side is busy while the AI side runs" number. The correct
+measurement is a two-point one: a **quiet-board baseline** (osnoise with no workload) against the same
+window during a run, and the difference is the workload's own CPU share.
+
+**`hwlat` finds no hardware stalls**: a 5 s window produced no hardware-latency entries, so there is no
+SMI-like interference on this board at that resolution.
+
+**`perf` is blocked by a packaging gap**: the `perf` binary exists but refuses to run against
+`6.18.3-generic-update6` ("You may need to install linux-tools-6.18.3-generic-update6"). The kernel
+project builds image/headers/libc-dev but not the matching `linux-tools` package, so hardware counters on
+the X100 cluster are unavailable until that package is added to the packaging step - recorded as a tool
+gap with a concrete fix, not as a dead end.
