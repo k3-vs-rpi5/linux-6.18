@@ -291,3 +291,24 @@ the honest summary is "residency removes the I/O from the window, worth somewher
 For a deployment that starts frequently this is the difference between paying the cache fill per start
 and paying it once; for a long benchmark it is a small constant. Both runs and the sector counts are in
 `residency-runs.txt`.
+
+
+### uprobe on the user-space path: registration is cheap, the graph work is where time goes (2026-09-24)
+
+With update6's `UPROBES` enabled, entry/exit probes were registered by offset (`nm -D` -> `file:0xaddr`)
+on three library functions and one bench run was traced (`uprobe-summary.txt`):
+
+| probe | target | what it measures |
+|---|---|---|
+| `cpuinit` | `libggml-cpu.so: ggml_backend_cpu_init` | backend setup |
+| `sres` | `libllama.so: llama_context::sched_reserve()` | the scheduler/graph reservation inside context creation |
+| `gcomp` | `libllama.so: llama_context::graph_compute(ggml_cgraph*, bool)` | every graph execution (prefill and each decode step) |
+
+Two instrument lessons recorded: ftrace wants the **offset** form (`file:0xaddr`) rather than a mangled
+symbol name, and its trace lines join pid and comm (`llama-bench-690036`), which a naive parser reads as
+a missing field.
+
+The measurement itself confirms the kernel-side picture from the user side: the backend init and the
+scheduler reservation are **sub-millisecond to low-millisecond** operations, while `graph_compute` is
+where the millisecond-scale work lives - the same conclusion the kernel function profile reached from
+the other direction (93-96 % of kernel time is waiting; the run's time is inside the graph work).
