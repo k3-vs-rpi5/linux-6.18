@@ -269,3 +269,25 @@ therefore cold-cache I/O, not a constant, and a cold start costs 4.6 s of wall t
 CPU. The lever is residency of the weights before the first request (preload, readahead, mlock or a
 warm-up pass) - a base-software change with a measured prize, and the first such change this project
 has quantified on the kernel side.
+
+
+### Residency tested as an optimisation: mechanism confirmed, prize measured honestly (2026-09-24)
+
+One variable, two controlled runs of the same benchmark (`-p 8 -n 128 -r 3`): **A** with a cold page
+cache, **B** with the model pre-read into the cache (`dd if=model of=/dev/null`) before the run.
+
+| run | wall | storage read during the benchmark | note |
+|---|---|---|---|
+| A cold | **60,089 ms** | **2 GB** | the benchmark pays the cache fill |
+| B preloaded | **58,970 ms** | **0 GB** | the preload (2 GB) happened before the run |
+
+So the mechanism is exactly as expected - preloading removes the storage traffic from the measured
+window - and the **wall-time prize in this controlled pair is 1.1 s (1.8 %)**. An earlier, less
+controlled pair (shorter runs, n=8, profiler enabled) showed 4.6 s (9.8 %); the difference between the
+two pairs is itself recorded: the smaller the run, the larger the share of one-off cold-start cost, so
+the honest summary is "residency removes the I/O from the window, worth somewhere between 1.8 % and
+9.8 % of wall time depending on how much one-off cost the run carries".
+
+For a deployment that starts frequently this is the difference between paying the cache fill per start
+and paying it once; for a long benchmark it is a small constant. Both runs and the sector counts are in
+`residency-runs.txt`.
