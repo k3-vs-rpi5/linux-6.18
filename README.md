@@ -236,3 +236,25 @@ Checked against `config/base.config` plus the update deltas, with the question e
 Two deltas therefore follow: **update5** (profiler + graph return values, already building) and
 **update6** (uprobes, latency/noise tracers, stack tracer, hardware perf events). The barrier device and
 the hugetlb pool are not options but work items.
+
+
+## First kernel profile with update6 (2026-09-24)
+
+`function_profile_enabled` during one `llama-bench` run, all sixteen `trace_stat/functionN` files
+aggregated by `tools/kernel-profile.py` (host-side, off-band per Rule 2 of the ONNX project's tooling
+rules), with sleep-dominated paths removed for a "working" view:
+
+| view | result |
+|---|---|
+| all kernel time | 6,710 s over 62 functions - **sleep-inclusive**, dominated by `schedule` (2,559 s), `do_idle` (662 s), timeouts, futex and epoll waits |
+| **working view** (sleep paths removed) | **452.7 s = 6.7 %** of all kernel time |
+| top working entries | `__riscv_sys_read` / `ksys_read` / `vfs_read` **6,751 calls, 40.9 s, mean 6.1 ms per call**; `anon_pipe_read` 679 calls / 35.3 s; `rcu_gp_fqs_loop` 1374 / 24.5 s; `hrtimer_nanosleep`, `do_nanosleep`, `core_sys_select` |
+
+Two readings. First, the kernel is not where a decode run spends its time - 93 % of kernel time is
+waiting, which is expected and now measured. Second, the dominant *working* path is the read path with a
+**6.1 ms mean per read**, which is not page-cache speed: that is the storage path, and it is the first
+kernel-side candidate for the 20-30 ms session-creation cost this project has been chasing. `rcu_gp_fqs_loop`
+(24.5 s) is the second candidate, and it exists because update4 enabled RCU boost.
+
+Tool and evidence: `tools/kernel-profile.py` in the ONNX project, raw 16-CPU dump in
+`k3-evidence/linux-6.18/update6-profile-20260923/profile-full.txt`.
