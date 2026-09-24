@@ -229,7 +229,7 @@ Checked against `config/base.config` plus the update deltas, with the question e
 | `OSNOISE_TRACER`, `HWLAT_TRACER` | missing -> update6 | is the board quiet, and are there hardware stalls - the monitor's question, at kernel resolution |
 | `IRQSOFF_TRACER`, `PREEMPT_TRACER`, `TIMERLAT_TRACER` | missing -> update6 | worst-case interrupt-off, preemption-off and timer latency = the jitter a host-side decode step can suffer |
 | `STACK_TRACER` | missing -> update6 | turns a latency finding into a call path |
-| `HW_PERF_EVENTS` | missing -> update6 | hardware counters on the X100 cluster (the AI cores stay invisible to Linux) |
+| hardware counters | **present in the base config** (`PERF_EVENTS` + `RISCV_PMU_SBI`); `HW_PERF_EVENTS` is not a RISC-V symbol and the delta line carrying it was inert | cycles, instructions, branches, L1 and dTLB counts; measured 2026-09-24 to count the **AI cluster too**, not only X100 - see `/root/k3-evidence/linux-6.18/perf-counters-20260924/` |
 | 1 GiB hugetlb reservation and `/dev/hugetlb_1g` | config present (`HUGETLBFS`, `HUGETLB_PAGE`), pool and device absent | whether the runtime's `mem_backend: HPAGE` can be served properly |
 | a barrier device replacing the heap fallback | needs a BSP patch | ~5 ms/token of barrier cost across ~253 operator boundaries |
 
@@ -326,8 +326,24 @@ window during a run, and the difference is the workload's own CPU share.
 **`hwlat` finds no hardware stalls**: a 5 s window produced no hardware-latency entries, so there is no
 SMI-like interference on this board at that resolution.
 
-**`perf` is blocked by a packaging gap**: the `perf` binary exists but refuses to run against
-`6.18.3-generic-update6` ("You may need to install linux-tools-6.18.3-generic-update6"). The kernel
-project builds image/headers/libc-dev but not the matching `linux-tools` package, so hardware counters on
-the X100 cluster are unavailable until that package is added to the packaging step - recorded as a tool
-gap with a concrete fix, not as a dead end.
+**`perf` is unblocked, and the tool is worth more than the gap suggested** (2026-09-24). The failure
+was only a path: `/usr/bin/perf` is Debian's wrapper and resolves
+`/usr/lib/linux-tools/$(uname -r)/perf`, which the out-of-tree package build cannot produce - but the
+*stock* `/usr/lib/linux-tools/6.18.3-generic/perf` is on the board, is `6.18.3.g4158237f35b8` (the same
+commit as this project's pinned source), and runs against update6 unmodified. Counters measured
+available: `cycles`, `instructions`, `branches`, `branch-misses`, `L1-dcache-loads/-misses`,
+`dTLB-loads`; not available: `dTLB-load-misses`, `cache-references`, `cache-misses`. There is also an
+unused `rvtrace` PMU (type 10) with a per-CPU sink group.
+
+The instrument then corrected a standing premise rather than merely unblocking a plan: with idle
+controls on both masks, **`perf` counts the AI cluster's cycles and instructions on this kernel** -
+4.7e6 cycles per 10 s on cpu8-15 while idle against 290e9 cycles in a 51.5 s decode window, 1.13e9
+cycles per decoded token across eight harts, 5.0 cycles per instruction, and 8.07e9 L1 misses whose
+64-byte lines match the 371 GiB of weights the same 256 tokens stream. The 2026-09-17 record that the
+cluster is invisible to Linux-side instruments is therefore **not reproduced on this board**, and the
+`CONFIG_HW_PERF_EVENTS=y` line in update6 is *inert*: the symbol does not exist for RISC-V, and the
+counters work through the base config's `PERF_EVENTS` + `RISCV_PMU_SBI`. What remains true is the
+contract's evidence rule for A100 work (vendor-side engagement, TCM occupancy and the throughput
+arithmetic); what changes is that a counter now exists alongside it. Full record, methods and raw logs:
+`/root/k3-evidence/linux-6.18/perf-counters-20260924/`. A version-specific `linux-tools` package
+remains the honest packaging fix for a delivered artefact and is not claimed here.
