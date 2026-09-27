@@ -181,9 +181,9 @@ uses, so taking it off is part of making a stress test fair. The board's wired
 ## Workspace integration
 
 This repository lives at `projects/linux-6.18` and carries its own Git history.
-It is not listed in the workspace manifest yet, because the manifest resolves
-`linux-6.18.git` from the shared remote and the first push still needs human
-approval. Once the remote repository exists, add this entry to `default.xml`:
+It is listed in the workspace manifest as of 2026-09-26, in the `ai,notdefault`
+group, so a default `repo sync` is unaffected and an explicit `-g ai` sync
+places it. The manifest entry is:
 
 ```xml
 <project name="linux-6.18.git" path="projects/linux-6.18" />
