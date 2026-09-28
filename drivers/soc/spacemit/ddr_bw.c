@@ -26,6 +26,19 @@
 #define DDR_PERF_MAGIC      'D'
 #define IOC_INIT_PORT       _IOW(DDR_PERF_MAGIC, 1, int)
 #define IOC_GET_STAT        _IOWR(DDR_PERF_MAGIC, 2, struct ddr_perf_stat)
+#define IOC_GET_ALL         _IOR(DDR_PERF_MAGIC, 3, struct ddr_perf_all)
+
+/* Raw per-port counters as the hardware presents them: no delta, no scaling
+ * and no clamp, so a window carrying more than 8 GiB/s can still be measured.
+ * User space subtracts consecutive readings; each counter is 32 bits wide in
+ * units of 16 bytes, so a 100 ms window has ample headroom. */
+struct ddr_perf_all {
+	__u32 window[5];
+	__u32 read_bytes[5];
+	__u32 write_bytes[5];
+	__u32 read_reqs[5];
+	__u32 write_reqs[5];
+};
 
 /* Data structure shared with user space */
 struct ddr_perf_stat {
@@ -143,6 +156,7 @@ static long ddr_perf_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 {
 	struct ddr_perf_stat stat;
 	struct ddr_perf_raw_stat raw_stat;
+	struct ddr_perf_all all;
 	u32 port;
 	u32 val;
 	u32 i;
@@ -177,6 +191,21 @@ static long ddr_perf_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		mutex_unlock(&perf_lock);
 
 		if (copy_to_user((void __user *)arg, &stat, sizeof(stat)))
+			return -EFAULT;
+		break;
+
+	case IOC_GET_ALL:
+		memset(&all, 0, sizeof(all));
+		mutex_lock(&perf_lock);
+		for (i = 0; i <= 4; i++) {
+			all.window[i]      = read_axi_mon_sum(i, 0);
+			all.read_reqs[i]   = read_axi_mon_sum(i, 1);
+			all.write_reqs[i]  = read_axi_mon_sum(i, 9);
+			all.read_bytes[i]  = read_axi_mon_sum(i, 16);
+			all.write_bytes[i] = read_axi_mon_sum(i, 18);
+		}
+		mutex_unlock(&perf_lock);
+		if (copy_to_user((void __user *)arg, &all, sizeof(all)))
 			return -EFAULT;
 		break;
 
