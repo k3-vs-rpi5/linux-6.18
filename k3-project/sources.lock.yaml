@@ -1,0 +1,55 @@
+schema_version: 1
+source:
+  name: linux-6.18 (SpacemiT BSP)
+  upstream: https://github.com/spacemit-com/linux-6.18.git
+  ref: k3-br-v1.0.7
+  commit: 4158237f35b8fd62ba198c1627e5a66e5a34c50f
+  license: GPL-2.0
+  checkout: src/linux-6.18
+  identity_note: >-
+    the board runs 6.18.3-generic #1.0.7.4, which is this branch family; the
+    branch head k3-br-v1.0.8 exists and is deliberately not used, so update1
+    differs from the running kernel only by its declared config delta
+  integrity_command: git -C src/linux-6.18 rev-parse HEAD
+  kernelrelease_command: make -s -C src/linux-6.18 kernelversion
+base_config:
+  file: config/base.config
+  sha256: fa00a0a4f5791ec7798fc6e1abc26d0d2d59a1a6e76734768291d8facfbd9270
+  origin: /proc/config.gz on the K3 board, 2026-09-18
+  note: >-
+    the running configuration, so the first update changes the declared options
+    and nothing else
+updates:
+  update1:
+    delta: config/update1.config
+    reason: >-
+      the high-concurrency multi-agent load starved the RCU grace-period
+      kthread (rcu_preempt kthread starved for 175000 jiffies) and wedged the
+      board; the delta enables RCU priority boosting and the lockup detectors
+    release_version: 6.18.3-generic-update1
+  update2:
+    delta: config/update2.config
+    patches:
+      - patches/0001-ddr-bw-raw-64bit-readout.patch
+    reason: >-
+      the DDR monitor's only readout scales each delta by 16 and clamps into 32
+      bits, so any window above 8 GiB/s reports the same constant while a decode
+      on this board sustains about 22 GiB/s; the patch adds a raw per-port
+      readout and leaves the existing ioctl untouched
+    verification: >-
+      the driver object compiles with the resolved update2 config against the
+      pinned checkout, and a board run reads decode traffic above 8 GiB/s that
+      the old ioctl could only report as clamped
+    release_version: 6.18.3-generic-update2
+  update3:
+    delta: config/update3.config
+    reason: >-
+      the board's kernel exposes no BTF, so the eBPF collectors hand-validate
+      every tracepoint field offset and cannot use CO-RE; enabling
+      CONFIG_DEBUG_INFO_BTF gives them the kernel's own type information
+    verification: >-
+      /sys/kernel/btf/vmlinux exists after the reboot, the monitor's dependency
+      check flips btf from missing to present, the density collectors still
+      attach and report, and a CO-RE program compiled against a vmlinux.h
+      generated from the board's own BTF loads there
+    release_version: 6.18.3-generic-update3

@@ -1,0 +1,24 @@
+schema_version: 2
+project: linux-6.18
+upstream:
+  url: https://github.com/spacemit-com/linux-6.18.git
+  policy: pinned-vendor-branch
+source_lock: sources.lock.yaml
+public_delivery:
+  state: automatable
+  intended_build_script: scripts/build.sh
+  intended_run_script: scripts/run.sh
+  public_shell_entrypoints: 2
+  evidence_policy: explicit-absolute-root-outside-project
+clusters:
+  x100: the Linux cluster, cpu0-7, where every interrupt thread and the host side of the AI work run
+  a100: reached only by compiled IME2 code plus the vendor runtime; the kernel does not schedule ordinary tasks there
+packages:
+  scheme: 6.18.3-generic-update<N> for a frozen update, 6.18.3-generic-dev+<shortsha> for iteration
+  contents: linux-image, linux-headers and linux-libc-dev, built from this tree with the declared base config plus the update delta
+blind_spot:
+  known: the board's kernel is a vendor BSP build, so a workspace build is only comparable once its config is derived from the running board
+  planned: every update records the base config digest, the delta and the produced package digests, and is installed only after a recorded run
+publication:
+  public_claim: false
+  blocker: first update not yet built and not yet run on the board
